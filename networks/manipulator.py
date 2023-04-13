@@ -206,9 +206,14 @@ def manipulator(position_embedder, view_embedder, model_coarse, model_fine, ori_
 
 
 def manipulator_eval(position_embedder, view_embedder, model_coarse, model_fine, ori_poses,
-                     hwk, trans_dicts, save_dir, ins_rgbs, args, gt_rgbs=None, gt_labels=None):
+                     hwk, trans_dicts, save_dir, ins_rgbs, args, gt_rgbs=None, gt_labels=None,dataset_name = 'replica'):
     """move_object must between 1 to args.class_number"""
-    _, _, dataset_name, scene_name = args.datadir.split('/')
+
+    data_info = args.datadir.split('/')
+    if dataset_name is None :
+        dataset_name = data_info[-2]
+    scene_name = data_info[-1]
+    # _, _, dataset_name, scene_name = args.datadir.split('/')
     H, W, K = hwk
     if gt_rgbs is not None:
         gt_rgbs_cpu = gt_rgbs.cpu().numpy()
@@ -291,7 +296,8 @@ def manipulator_eval(position_embedder, view_embedder, model_coarse, model_fine,
             gt_label_np = valid_gt_labels.cpu().numpy()
             if valid_gt_num > 0:
                 # mask = (gt_label < args.ins_num).type(torch.float32)
-                pred_label, ap, pred_matched_order = ins_eval(ins[..., :-1].cpu(), gt_ins, valid_gt_num, args.ins_num)
+                with torch.no_grad():
+                    pred_label, ap, pred_matched_order,_ = ins_eval(ins[..., :-1].cpu(), gt_ins, valid_gt_num, args.ins_num)
             else:
                 pred_label = -1 * torch.ones([H, W])
                 ap = torch.tensor([1.0])
