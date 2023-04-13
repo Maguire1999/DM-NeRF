@@ -1,0 +1,30 @@
+expname = scene0010_00_full
+basedir = ./logs/scannet
+
+# datadir = ./data/scannet/scene0010_00
+# audodl-3090
+datadir = /root/autodl-tmp/datasets/nerf_scannet/scene0010_00
+# 2080ti
+# datadir = /data/dzy_data/nerf/datasets/nerf_scannet/scene0010_00
+
+lrate_decay = 500
+
+N_samples = 64
+N_importance = 128
+N_train = 2048
+N_test = 2048
+
+crop_width = 640
+crop_height = 480
+resize
+
+near = 0.0
+far = 7.6
+testskip = 1
+
+penalize
+tolerance = 0.05
+deta_w = 0.05
+
+# render test step
+i_test = -1

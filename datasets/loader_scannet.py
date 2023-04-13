@@ -5,7 +5,7 @@ import json
 import imageio
 import numpy as np
 from tools.pose_generator import pose_spherical
-
+import matplotlib.pyplot as plt
 
 def img_i(f):
     if f.endswith('png'):
@@ -88,10 +88,10 @@ class img_processor:
 
         i_split = [np.arange(counts[i], counts[i + 1]) for i in range(2)]
         if not self.resize:
-            intrinsic_f = os.path.join(self.data_dir, 'intrinsic', 'intrinsic_color.txt')
+            intrinsic_f = os.path.join(self.data_dir,splits[0] ,'intrinsic', 'intrinsic_color.txt')
             intrinsic = np.loadtxt(intrinsic_f, delimiter=' ')
         else:
-            intrinsic_f = os.path.join(self.data_dir, 'intrinsic', 'intrinsic_depth.txt')
+            intrinsic_f = os.path.join(self.data_dir,splits[0] , 'intrinsic', 'intrinsic_depth.txt')
             intrinsic = np.loadtxt(intrinsic_f, delimiter=' ')
         return all_rgb, all_pose, i_split, intrinsic
 
@@ -103,7 +103,7 @@ class ins_processor:
         self.testskip = testskip
         self.resize = resize
 
-    def load_semantic_instance(self):
+    def load_semantic_instance(self,load_npz = False):
         splits = ['train', 'test']
         all_ins = []
         for s in splits:
@@ -113,9 +113,14 @@ class ins_processor:
                 skip = self.testskip
             indices = np.loadtxt(os.path.join(self.data_dir, f'{s}_split.txt')).astype(np.int16)
             file_train = os.path.join(self.data_dir, s)
+            if load_npz:
+                ins_fnames = [os.path.join(file_train, f'{s}_ins', f'{index}.npz') for index in indices]
+                gt_labels = np.array([ins_npz_i(f) for f in ins_fnames])
+            else:
+                ins_fnames = [os.path.join(file_train, f'{s}_ins_full', f'{index}.png') for index in indices]
+                gt_labels = [imageio.imread(f) for f in ins_fnames]
+                gt_labels = np.array(gt_labels).astype(np.float32)
 
-            ins_fnames = [os.path.join(file_train, f'{s}_ins', f'{index}.npz') for index in indices]
-            gt_labels = np.array([ins_npz_i(f) for f in ins_fnames])
             index = np.arange(0, len(gt_labels), skip)
             gt_labels = gt_labels[index]
             if self.resize:
@@ -128,10 +133,24 @@ class ins_processor:
             ins_rgbs = f['datasets'][:]
         f.close()
         unique_labels = np.unique(gt_labels)
-        ins_num = len(unique_labels) - 1
-        ins_rgbs = ins_rgbs[:ins_num]
-        gt_labels[gt_labels == -1] = ins_num
+        if load_npz:
+            ins_num = len(unique_labels) - 1
+            ins_rgbs = ins_rgbs[:ins_num]
+            gt_labels[gt_labels == -1] = ins_num
+        else:
+            # ins_num = len(unique_labels) - 1
+            ins_num = unique_labels.shape[0]
         return gt_labels, ins_rgbs, ins_num
+
+    def show(self,item,ins_rgbs):
+        h, w = item.shape
+        ra_se_im_t = np.zeros(shape=(h, w, 3))
+        unique_labels = np.unique(item)
+        for index, label in enumerate(unique_labels):
+            ra_se_im_t[item == label] = ins_rgbs[int(label)]
+        ra_se_im_t = ra_se_im_t.astype(np.uint8)
+        plt.imshow(ra_se_im_t)
+        plt.show()
 
     def selected_pixels(self, full_ins, ins_num, crop_mask):
         N, H, W = full_ins.shape

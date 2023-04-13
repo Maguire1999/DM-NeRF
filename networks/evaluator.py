@@ -56,8 +56,13 @@ def hungarian(pred_ins, gt_ins, valid_ins_num, ins_num):
     gt_ins = gt_ins.permute([1, 0])
     pred_ins = pred_ins[None, :, :]
     gt_ins = gt_ins[:, None, :]
-
-    cost_ce = torch.mean(-gt_ins * torch.log(pred_ins + 1e-8) - (1 - gt_ins) * torch.log(1 - pred_ins + 1e-8), dim=-1)
+    try:
+        pred_ins = pred_ins.cpu()
+        gt_ins = gt_ins.cpu()
+        cost_ce = torch.mean(-gt_ins * torch.log(pred_ins + 1e-8) - (1 - gt_ins) * torch.log(1 - pred_ins + 1e-8), dim=-1)
+        # cost_ce = np.mean(-gt_ins * np.log(pred_ins + 1e-8) - (1 - gt_ins) * np.log(1 - pred_ins + 1e-8), dim=-1)
+    except:
+        cost_ce = torch.mean(-gt_ins * torch.log(pred_ins + 1e-8) - (1 - gt_ins) * torch.log(1 - pred_ins + 1e-8), dim=-1)
 
     # get soft iou score between prediction and ground truth, don't need do mean operation
     TP = torch.sum(pred_ins * gt_ins, dim=-1)
@@ -122,6 +127,59 @@ def calculate_ap(IoUs_Metrics, gt_number, confidence=None, function_select='inte
     return ap_list
 
 
+def ins_eval_except(pred_ins, gt_ins, gt_ins_num, ins_num, mask=None):
+    if mask is None:
+        pred_label = torch.argmax(pred_ins, dim=-1)
+        valid_pred_labels = torch.unique(pred_label)
+    else:
+        pred_label = torch.argmax(pred_ins, dim=-1)
+
+        pred_label[mask == 0] = ins_num  # unlabeled index for prediction set as -1
+        valid_pred_labels = torch.unique(pred_label)
+        # valid_pred_labels = torch.unique(pred_label)[:-1]
+
+    valid_pred_num = len(valid_pred_labels)
+    # prepare confidence masks and confidence scores
+    pred_conf_mask = np.max(pred_ins.numpy(), axis=-1)
+
+    pred_conf_list = []
+    valid_pred_labels = valid_pred_labels.numpy().tolist()
+    for label in valid_pred_labels:
+        index = torch.where(pred_label == label)
+        ssm = pred_conf_mask[index[0], index[1]]
+        pred_obj_conf = np.median(ssm)
+        pred_conf_list.append(pred_obj_conf)
+    pred_conf_scores = torch.from_numpy(np.array(pred_conf_list))
+
+    # change predicted labels to each signal object masks not existed padding as zero
+    pred_ins = torch.zeros_like(gt_ins)
+    pred_ins[..., :valid_pred_num] = F.one_hot(pred_label)[..., valid_pred_labels]
+
+    cost_ce, cost_iou, order_row, order_col = hungarian(pred_ins.reshape((-1, ins_num)),
+                                                        gt_ins.reshape((-1, ins_num)),
+                                                        gt_ins_num, ins_num)
+
+    valid_inds = order_col[:gt_ins_num]
+    ious_metrics = 1 - cost_iou[order_row, valid_inds]
+
+    # prepare confidence values
+    confidence = torch.zeros(size=[gt_ins_num])
+    for i, valid_ind in enumerate(valid_inds):
+        if valid_ind < valid_pred_num:
+            confidence[i] = pred_conf_scores[valid_ind]
+        else:
+            confidence[i] = 0
+
+    ap = calculate_ap(ious_metrics, gt_ins_num, confidence=confidence, function_select='integral')
+
+    invalid_mask = valid_inds >= valid_pred_num
+    valid_inds[invalid_mask] = 0
+    valid_pred_labels = torch.from_numpy(np.array(valid_pred_labels))
+    return_labels = valid_pred_labels[valid_inds].cpu().numpy()
+    return_labels[invalid_mask] = -1
+
+    return pred_label, ap, return_labels,ious_metrics
+
 def ins_eval(pred_ins, gt_ins, gt_ins_num, ins_num, mask=None):
     if mask is None:
         pred_label = torch.argmax(pred_ins, dim=-1)
@@ -172,4 +230,52 @@ def ins_eval(pred_ins, gt_ins, gt_ins_num, ins_num, mask=None):
     return_labels = valid_pred_labels[valid_inds].cpu().numpy()
     return_labels[invalid_mask] = -1
 
-    return pred_label, ap, return_labels
+    return pred_label, ap, return_labels,ious_metrics
+
+def get_non_robust_classes(confusion_matrix, robustness_thres):
+    axis_0 = np.sum(confusion_matrix, axis=0)
+    axis_1 = np.sum(confusion_matrix, axis=1)
+    total_labels = axis_0.sum()
+    non_robust_0 = axis_0 / total_labels < robustness_thres
+    non_robust_1 = axis_1 / total_labels < robustness_thres
+    return np.where(np.logical_and(non_robust_0, non_robust_1))[0].tolist()
+
+
+def calculate_miou(confusion_matrix, ignore_class=None, robust=0.005):
+    MIoU = np.divide(np.diag(confusion_matrix), (np.sum(confusion_matrix, axis=1) + np.sum(confusion_matrix, axis=0) - np.diag(confusion_matrix)))
+    if ignore_class is not None:
+        ignore_class += get_non_robust_classes(confusion_matrix, robust)
+        for i in ignore_class:
+            MIoU[i] = float('nan')
+    MIoU = np.nanmean(MIoU)
+    return MIoU
+
+
+class ConfusionMatrix:
+
+    def __init__(self, num_classes, ignore_class=None, robust=0.005):
+        np.seterr(divide='ignore', invalid='ignore')
+        self.num_class = num_classes
+        self.ignore_class = ignore_class
+        self.confusion_matrix = np.zeros((self.num_class,) * 2)
+        self.robust = robust
+
+    def _generate_matrix(self, gt_image, pre_image):
+        mask = (gt_image >= 0) & (gt_image < self.num_class)
+        label = self.num_class * gt_image[mask].astype('int') + pre_image[mask]
+        count = np.bincount(label, minlength=self.num_class**2)
+        confusion_matrix = count.reshape(self.num_class, self.num_class)
+        return confusion_matrix
+
+    def add_batch(self, gt_image, pre_image, return_miou=False):
+        assert gt_image.shape == pre_image.shape
+        confusion_matrix = self._generate_matrix(gt_image, pre_image)
+        self.confusion_matrix += confusion_matrix
+        if return_miou:
+            return calculate_miou(confusion_matrix, self.ignore_class, self.robust)
+
+    def get_miou(self):
+        return calculate_miou(self.confusion_matrix, self.ignore_class, self.robust)
+
+    def reset(self):
+        self.confusion_matrix = np.zeros((self.num_class,) * 2)

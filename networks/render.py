@@ -24,6 +24,7 @@ def render_train(raw, z_vals, rays_d):
     ins_map = torch.sum(weights_ins[..., None] * ins_labels, -2)  # [N_rays, Class_number]
     ins_map = torch.sigmoid(ins_map)
     ins_map = ins_map[..., :-1]
+    # ins_map = ins_map[..., ]
 
     return rgb_map, weights, depth_map, ins_map
 

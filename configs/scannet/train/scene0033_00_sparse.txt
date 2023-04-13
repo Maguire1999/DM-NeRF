@@ -1,0 +1,35 @@
+expname = scene0033_00_sparse10
+
+label_sparse_inv = 10
+
+basedir = ./logs/scannet
+# M40
+# datadir = /media/alpha4TB/exchange/nerf/nerf_scannet/scene0033_00
+# audodl-3090
+datadir = /root/autodl-tmp/datasets/nerf_scannet/scene0033_00
+# 2080ti
+# datadir = /data/dzy_data/nerf/datasets/nerf_scannet/scene0033_00
+
+
+lrate_decay = 500
+
+N_samples = 64
+N_importance = 128
+N_train = 2048
+N_test = 2048
+
+crop_width = 600
+crop_height = 450
+resize
+
+near = 0.0
+far = 9.8
+testskip = 1
+
+penalize
+tolerance = 0.05
+deta_w = 0.05
+
+
+# render test step
+i_test = -1

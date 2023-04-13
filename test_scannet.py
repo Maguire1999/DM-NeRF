@@ -1,7 +1,7 @@
 import torch
 
 from datasets.loader_scannet import *
-from networks.tester import render_test
+from networks.tester import render_test, render_test_scannet
 from config import create_nerf, initial
 from networks.manipulator import manipulator_demo
 
@@ -16,6 +16,8 @@ def test():
                                    'render_test_{:06d}'.format(iteration))
         os.makedirs(testsavedir, exist_ok=True)
         mathed_file = os.path.join(testsavedir, 'matching_log.txt')
+        # render_test
+        # render_test_scannet
         render_test(position_embedder, view_embedder, model_coarse, model_fine, poses, hwk, args,
                     gt_imgs=images, gt_labels=instances, ins_rgbs=ins_colors, savedir=testsavedir,
                     matched_file=mathed_file, crop_mask=crop_mask)

@@ -13,7 +13,12 @@ def test():
         testsavedir = os.path.join(args.basedir, args.expname, args.log_time,
                                    'render_test_{:06d}'.format(iteration))
         os.makedirs(testsavedir, exist_ok=True)
+        # seleted = [178,179]
         mathed_file = os.path.join(testsavedir, 'matching_log.txt')
+
+        # render_test(position_embedder, view_embedder, model_coarse, model_fine, poses[seleted], hwk, args,
+        #             gt_imgs=images[seleted], gt_labels=instances[seleted], ins_rgbs=ins_colors, savedir=testsavedir,
+        #             matched_file=mathed_file)
         render_test(position_embedder, view_embedder, model_coarse, model_fine, poses, hwk, args,
                     gt_imgs=images, gt_labels=instances, ins_rgbs=ins_colors, savedir=testsavedir,
                     matched_file=mathed_file)

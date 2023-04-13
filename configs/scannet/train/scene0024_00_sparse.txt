@@ -1,0 +1,34 @@
+
+expname = scene0024_00_sparse10
+label_sparse_inv = 10
+
+basedir = ./logs/scannet
+# datadir = ./data/scannet/scene0024_00
+# audodl-3090
+datadir = /root/autodl-tmp/datasets/nerf_scannet/scene0024_00
+# 2080ti
+# datadir = /data/dzy_data/nerf/datasets/nerf_scannet/scene0024_00
+
+
+lrate_decay = 500
+
+N_samples = 64
+N_importance = 128
+N_train = 1500
+N_test = 1500
+
+crop_width = 600
+crop_height = 450
+resize
+
+near = 0.0
+far = 9.8
+testskip = 1
+
+penalize
+tolerance = 0.05
+deta_w = 0.05
+
+
+# render test step
+i_test = -1

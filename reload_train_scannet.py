@@ -3,17 +3,18 @@ import torch
 import numpy as np
 
 from networks.render import dm_nerf
+from networks.tester import render_test, render_test_scannet
 from config import initial, create_nerf
-from networks.tester import render_test
 from networks.penalizer import ins_penalizer
-from datasets.loader_replica import load_data
-from networks.helpers import get_select_full, z_val_sample
+from datasets.loader_scannet import load_data
+from networks.helpers import get_select_crop, z_val_sample
 from networks.evaluator import ins_criterion, img2mse, mse2psnr
+
 import time
 from tqdm.auto import tqdm
 
 np.random.seed(0)
-torch.cuda.manual_seed(3)
+torch.cuda.manual_seed(4)
 
 
 def train():
@@ -21,19 +22,21 @@ def train():
 
     model_fine.train()
     model_coarse.train()
-    N_iters = 200000 + 1
-    # N_iters = 500000 + 1
+    N_iters = 400000 + 1
+    # N_iters = 1 + 1
     num_img = i_train.shape[0]
+
     z_val_coarse = z_val_sample(args.N_train, args.near, args.far, args.N_samples)
-    args.N_ins = None
-    for i in tqdm(range(0, N_iters)):
+    for i in tqdm(range(iteration, N_iters)):
         img_i = i % num_img
         # img_i = np.random.choice(i_train)
         gt_rgb = images[img_i].to(args.device)
         pose = poses[img_i, :3, :4].to(args.device)
         gt_label = gt_labels[img_i].to(args.device)
+        ins_index = ins_indices[img_i]
 
-        target_c, target_i, batch_rays = get_select_full(gt_rgb, pose, K, gt_label, args.N_train)
+        target_c, target_i, batch_rays, args.N_ins = get_select_crop(gt_rgb, pose, K, gt_label, ins_index, crop_mask,
+                                                                     args.N_train)
 
         all_info = dm_nerf(batch_rays, position_embedder, view_embedder, model_coarse, model_fine, z_val_coarse, args)
 
@@ -67,7 +70,6 @@ def train():
 
             emptiness_loss = emptiness_fine + emptiness_coarse
             total_loss = total_loss + emptiness_loss
-        # trans = extras['raw'][..., -1]
 
         # optimizing
         optimizer.zero_grad()
@@ -96,9 +98,9 @@ def train():
             }
             torch.save(save_model, path)
 
+        # if i % args.i_test == 0 and args.i_test != -1:
+        if i == 0:
         # if i % args.i_test == 0:
-        # if i == 0 :
-        if i % args.i_test == 0 and args.i_test != -1:
             model_coarse.eval()
             model_fine.eval()
             args.is_train = False
@@ -113,8 +115,10 @@ def train():
                 test_gt_labels = gt_labels[selected_i_test].to(args.device)
                 render_test(position_embedder, view_embedder, model_coarse, model_fine, test_poses, hwk, args,
                             gt_imgs=test_imgs, gt_labels=test_gt_labels, ins_rgbs=ins_rgbs, savedir=testsavedir,
-                            matched_file=matched_file)
-            print('Training model saved!')
+                            matched_file=matched_file, crop_mask=crop_mask)
+                # render_test()
+                # render_test_scannet
+                print('Training model saved!')
             args.is_train = True
             model_coarse.train()
             model_fine.train()
@@ -134,17 +138,20 @@ def train():
             test_poses = torch.Tensor(poses[selected_i_test].to(args.device))
             test_imgs = images[selected_i_test]
             test_gt_labels = gt_labels[selected_i_test].to(args.device)
-            render_test(position_embedder, view_embedder, model_coarse, model_fine, test_poses, hwk, args,
+            render_test_scannet(position_embedder, view_embedder, model_coarse, model_fine, test_poses, hwk, args,
                         gt_imgs=test_imgs, gt_labels=test_gt_labels, ins_rgbs=ins_rgbs, savedir=testsavedir,
-                        matched_file=matched_file)
+                        matched_file=matched_file, crop_mask=crop_mask)
+            # render_test
         print('Training model saved!')
-
+        args.is_train = True
+        model_coarse.train()
+        model_fine.train()
 
 if __name__ == '__main__':
     args = initial()
 
     # load data
-    images, poses, hwk, i_split, gt_labels, ins_rgbs, args.ins_num = load_data(args)
+    images, poses, hwk, i_split, gt_labels, ins_rgbs, args.ins_num, ins_indices, crop_mask = load_data(args)
     print('Load data from', args.datadir)
 
     i_train, i_test = i_split
@@ -165,5 +172,12 @@ if __name__ == '__main__':
     sparse_inv = args.label_sparse_inv
     i_train_label_sparse = i_train[::sparse_inv]
     print("sparse label num:",i_train_label_sparse.shape[0])
+
+    ckpt_path = os.path.join(args.basedir, args.expname, args.log_time, args.test_model)
+    ckpt = torch.load(ckpt_path)
+    iteration = ckpt['iteration']
+    # Load model
+    model_coarse.load_state_dict(ckpt['network_coarse_state_dict'])
+    model_fine.load_state_dict(ckpt['network_fine_state_dict'])
 
     train()

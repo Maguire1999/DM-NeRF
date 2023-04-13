@@ -1,12 +1,13 @@
 expname = office_0
 basedir = ./logs/replica
-datadir = ./data/replica/office_0
+# 2080ti
+datadir = /data/dzy_data/nerf/datasets/nerf_replica/replica_ins/office_0
 
 lrate_decay = 500
 
 N_samples = 64
 N_importance = 128
-N_train = 3072
+N_train = 1024
 N_test = 4096
 
 

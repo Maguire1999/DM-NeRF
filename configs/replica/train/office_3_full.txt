@@ -1,14 +1,19 @@
-expname = office_3
+expname = office_3_full
+# sparse inv
+label_sparse_inv = 1
+
 basedir = ./logs/replica
 # 2080ti
 datadir = /data/dzy_data/nerf/datasets/nerf_replica/replica_ins/office_3
+# audodl-3090
+datadir = /root/autodl-tmp/datasets/nerf_replica/replica_ins/office_3
 
 lrate_decay = 500
 
 N_samples = 64
 N_importance = 128
-N_train = 1024
-N_test = 4096
+N_train = 2048
+N_test = 2048
 
 
 near = 0.0
@@ -21,5 +26,3 @@ deta_w = 0.05
 
 # render test step
 i_test = -1
-
-label_sparse_inv = 1

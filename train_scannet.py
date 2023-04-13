@@ -3,26 +3,33 @@ import torch
 import numpy as np
 
 from networks.render import dm_nerf
-from networks.tester import render_test
+from networks.tester import render_test, render_test_scannet
 from config import initial, create_nerf
 from networks.penalizer import ins_penalizer
 from datasets.loader_scannet import load_data
 from networks.helpers import get_select_crop, z_val_sample
 from networks.evaluator import ins_criterion, img2mse, mse2psnr
 
+import time
+from tqdm.auto import tqdm
 
 np.random.seed(0)
 torch.cuda.manual_seed(4)
 
 
 def train():
+    start_time = time.time()
+
     model_fine.train()
     model_coarse.train()
-    N_iters = 500000 + 1
+    N_iters = 300000 + 1
+    # N_iters = 1 + 1
+    num_img = i_train.shape[0]
 
     z_val_coarse = z_val_sample(args.N_train, args.near, args.far, args.N_samples)
-    for i in range(0, N_iters):
-        img_i = np.random.choice(i_train)
+    for i in tqdm(range(0, N_iters)):
+        img_i = i % num_img
+        # img_i = np.random.choice(i_train)
         gt_rgb = images[img_i].to(args.device)
         pose = poses[img_i, :3, :4].to(args.device)
         gt_label = gt_labels[img_i].to(args.device)
@@ -49,7 +56,10 @@ def train():
         # without penalize loss
         ins_loss = ins_loss_fine + ins_loss_coarse
         rgb_loss = rgb_loss_fine + rgb_loss_coarse
-        total_loss = ins_loss + rgb_loss
+        if img_i in i_train_label_sparse:
+            total_loss = ins_loss + rgb_loss
+        else:
+            total_loss = 0. + rgb_loss
 
         # use penalize
         if args.penalize:
@@ -88,7 +98,9 @@ def train():
             }
             torch.save(save_model, path)
 
-        if i % args.i_test == 0:
+        # if i % args.i_test == 0 and args.i_test != -1:
+        if i == 0:
+        # if i % args.i_test == 0:
             model_coarse.eval()
             model_fine.eval()
             args.is_train = False
@@ -104,11 +116,36 @@ def train():
                 render_test(position_embedder, view_embedder, model_coarse, model_fine, test_poses, hwk, args,
                             gt_imgs=test_imgs, gt_labels=test_gt_labels, ins_rgbs=ins_rgbs, savedir=testsavedir,
                             matched_file=matched_file, crop_mask=crop_mask)
-            print('Training model saved!')
+                # render_test()
+                # render_test_scannet
+                print('Training model saved!')
             args.is_train = True
             model_coarse.train()
             model_fine.train()
-
+    end_time = time.time()
+    print(f"training time : {end_time - start_time}")
+    if args.i_test == -1:
+        model_coarse.eval()
+        model_fine.eval()
+        args.is_train = False
+        # selected_indices = np.random.choice(len(i_test), size=[10], replace=False)
+        # selected_i_test = i_test[selected_indices]
+        selected_i_test = i_test
+        testsavedir = os.path.join(args.basedir, args.expname, args.log_time, 'testset_{:06d}'.format(i))
+        matched_file = os.path.join(testsavedir, 'matching_log.txt')
+        os.makedirs(testsavedir, exist_ok=True)
+        with torch.no_grad():
+            test_poses = torch.Tensor(poses[selected_i_test].to(args.device))
+            test_imgs = images[selected_i_test]
+            test_gt_labels = gt_labels[selected_i_test].to(args.device)
+            render_test_scannet(position_embedder, view_embedder, model_coarse, model_fine, test_poses, hwk, args,
+                        gt_imgs=test_imgs, gt_labels=test_gt_labels, ins_rgbs=ins_rgbs, savedir=testsavedir,
+                        matched_file=matched_file, crop_mask=crop_mask)
+            # render_test
+        print('Training model saved!')
+        args.is_train = True
+        model_coarse.train()
+        model_fine.train()
 
 if __name__ == '__main__':
     args = initial()
@@ -131,5 +168,9 @@ if __name__ == '__main__':
     images = torch.Tensor(images).cpu()
     gt_labels = torch.Tensor(gt_labels).type(torch.int16).cpu()
     poses = torch.Tensor(poses).cpu()
+
+    sparse_inv = args.label_sparse_inv
+    i_train_label_sparse = i_train[::sparse_inv]
+    print("sparse label num:",i_train_label_sparse.shape[0])
 
     train()

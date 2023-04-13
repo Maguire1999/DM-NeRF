@@ -1,0 +1,26 @@
+expname = room_0_sparse10
+
+label_sparse_inv = 10
+
+basedir = ./logs/replica/room
+# 2080ti
+datadir = /data/dzy_data/nerf/datasets/nerf_replica/replica_ins/room_0
+
+lrate_decay = 500
+
+N_samples = 64
+N_importance = 128
+N_train = 2048
+N_test = 2048
+
+
+near = 0.0
+far = 6.5
+testskip = 1
+
+penalize
+tolerance = 0.05
+deta_w = 0.05
+
+# render test step
+i_test = -1

@@ -24,6 +24,10 @@ def config_parser():
                         help='layers in network')
     parser.add_argument("--netwidth", type=int, default=256,
                         help='channels per layer')
+
+    parser.add_argument("--label_sparse_inv", type=int, default=1,
+                        help='label sparse inv')
+
     # 32*32*4
     parser.add_argument("--N_train", type=int, default=4096,
                         help='batch size (number of random rays per gradient step)')
@@ -77,7 +81,7 @@ def config_parser():
                         help='frequency of console printout and metric loggin')
     parser.add_argument("--i_img", type=int, default=500,
                         help='frequency of tensorboard image logging')
-    parser.add_argument("--i_save", type=int, default=10000,
+    parser.add_argument("--i_save", type=int, default=50000,
                         help='frequency of weight ckpt saving')
     parser.add_argument("--i_test", type=int, default=50000,
                         help='frequency of testset saving')
@@ -141,6 +145,19 @@ def create_nerf(args):
 def initial():
     parser = config_parser()
     args = parser.parse_args()
+
+    sparse_inv = args.label_sparse_inv
+    if args.expname[-4:] != 'full':
+        expname_list = args.expname.split('_')
+        num = int(args.expname[-2:])
+        try:
+            flag = (int(expname_list[-1]) == sparse_inv) or (num == sparse_inv)
+        except:
+            flag = (num == sparse_inv)
+
+        if not flag:
+            exp_str = '-new_sparse' + str(sparse_inv).zfill(2)
+            args.expname += exp_str
 
     # get log time
     if args.log_time is None:
